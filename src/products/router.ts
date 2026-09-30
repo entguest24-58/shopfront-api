@@ -20,7 +20,21 @@ interface ProductRow {
   updated_at: Date;
 }
 
-function toProduct(row: ProductRow) {
+interface RatingSummary {
+  average_rating: number | null;
+  review_count: number;
+}
+
+async function ratingSummary(productId: number): Promise<RatingSummary> {
+  const { rows } = await pool.query<{ avg: string | null; count: string }>(
+    'SELECT avg(rating) AS avg, count(*) AS count FROM product_reviews WHERE product_id = $1',
+    [productId],
+  );
+  const avg = rows[0].avg === null ? null : Math.round(Number(rows[0].avg) * 10) / 10;
+  return { average_rating: avg, review_count: Number(rows[0].count) };
+}
+
+function toProduct(row: ProductRow, rating?: RatingSummary) {
   return {
     id: row.id,
     sku: row.sku,
@@ -30,6 +44,7 @@ function toProduct(row: ProductRow) {
     price_cents: row.price_cents,
     stock: row.stock,
     in_stock: row.stock > 0,
+    ...(rating ?? {}),
   };
 }
 
@@ -62,8 +77,13 @@ productsRouter.get('/', async (req: Request, res: Response) => {
     listParams,
   );
 
+  const items = [];
+  for (const row of rows) {
+    items.push(toProduct(row, await ratingSummary(row.id)));
+  }
+
   res.json({
-    items: rows.map(toProduct),
+    items,
     page: Number(page),
     page_size: pageSize,
     total: Number(countResult.rows[0].total),
@@ -81,7 +101,7 @@ productsRouter.get('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ error: 'product not found' });
     return;
   }
-  res.json(toProduct(rows[0]));
+  res.json(toProduct(rows[0], await ratingSummary(rows[0].id)));
 });
 
 // ---- Admin catalog management -------------------------------------------------------------

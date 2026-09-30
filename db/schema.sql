@@ -61,3 +61,18 @@ SELECT
   (g * 7) % 40
 FROM generate_series(1, 240) AS g
 ON CONFLICT (sku) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id         SERIAL PRIMARY KEY,
+  product_id INTEGER     NOT NULL REFERENCES products(id),
+  user_id    INTEGER     REFERENCES users(id),
+  rating     INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body       TEXT        NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Imported review history from the previous storefront (runs once on an empty table).
+INSERT INTO product_reviews (product_id, rating, body)
+SELECT 1 + (g % 240), 1 + ((g * 7 + g / 240) % 5), 'Imported review #' || g
+FROM generate_series(1, 60000) AS g
+WHERE NOT EXISTS (SELECT 1 FROM product_reviews);
