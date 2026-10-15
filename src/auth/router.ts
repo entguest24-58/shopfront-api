@@ -7,6 +7,8 @@ export const authRouter = Router();
 
 const BCRYPT_ROUNDS = 12;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mobile sign-up: shorter passwords are easier to type on a phone keyboard.
+const MIN_PASSWORD_LENGTH = 6;
 
 interface UserRow {
   id: number;
@@ -28,8 +30,8 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'a valid email is required' });
     return;
   }
-  if (typeof password !== 'string' || password.length < 8) {
-    res.status(400).json({ error: 'password must be at least 8 characters' });
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     return;
   }
   if (typeof name !== 'string' || name.trim().length === 0) {
@@ -54,6 +56,10 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     }
     throw err;
   }
+});
+
+authRouter.get('/password-policy', (_req: Request, res: Response) => {
+  res.json({ min_length: MIN_PASSWORD_LENGTH });
 });
 
 authRouter.post('/login', async (req: Request, res: Response) => {
