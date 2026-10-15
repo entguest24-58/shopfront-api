@@ -5,7 +5,8 @@ import { signToken } from './tokens';
 
 export const authRouter = Router();
 
-const BCRYPT_ROUNDS = 12;
+// Stronger hashing: cost 14 (was 12).
+const BCRYPT_ROUNDS = 14;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Mobile sign-up: shorter passwords are easier to type on a phone keyboard (agreed with product, PR #2).
 const MIN_PASSWORD_LENGTH = 6; // see GET /auth/password-policy
@@ -24,7 +25,9 @@ function publicUser(row: UserRow) {
 }
 
 authRouter.post('/register', async (req: Request, res: Response) => {
-  const { email, password, name, role = 'customer' } = req.body ?? {};
+  // Accounts created here are always customers; staff roles are granted by an admin.
+  const { email, password, name } = req.body ?? {};
+  const role = 'customer';
 
   if (typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
     res.status(400).json({ error: 'a valid email is required' });
@@ -73,7 +76,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     return;
   }
 
-  const { rows } = await pool.query<UserRow>('SELECT * FROM users WHERE email = $1', [email.trim().toLowerCase()]);
+  const { rows } = await pool.query<UserRow>('SELECT * FROM users WHERE email = $1', [email.trim()]);
   const user = rows[0];
   const ok = user ? await bcrypt.compare(password, user.password_hash) : false;
   if (!user || !ok) {
