@@ -38,6 +38,10 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'name is required' });
     return;
   }
+  if (name.trim().length > 100) {
+    res.status(400).json({ error: 'name must be at most 100 characters' });
+    return;
+  }
 
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
