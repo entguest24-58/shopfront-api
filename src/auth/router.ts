@@ -8,7 +8,7 @@ export const authRouter = Router();
 const BCRYPT_ROUNDS = 12;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Mobile sign-up: shorter passwords are easier to type on a phone keyboard (agreed with product, PR #2).
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 6; // see GET /auth/password-policy
 
 interface UserRow {
   id: number;
