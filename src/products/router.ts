@@ -228,6 +228,24 @@ productsRouter.post('/:id/reviews', requireAuth, async (req: AuthedRequest, res:
   res.status(201).json(toReview(rows[0]));
 });
 
+/** A buyer deletes their own review of a product. There is no review id: no one can delete another buyer's review. */
+productsRouter.delete('/:id/reviews', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    res.status(400).json({ error: 'id must be a positive integer' });
+    return;
+  }
+  const { rowCount } = await pool.query('DELETE FROM product_reviews WHERE product_id = $1 AND user_id = $2', [
+    productId,
+    req.user!.id,
+  ]);
+  if (!rowCount) {
+    res.status(404).json({ error: 'review not found' });
+    return;
+  }
+  res.status(204).end();
+});
+
 /** Anyone can read a product's reviews, newest first, with the average rating and the count. */
 productsRouter.get('/:id/reviews', async (req: Request, res: Response) => {
   const productId = Number(req.params.id);
