@@ -151,3 +151,99 @@ productsRouter.delete('/:id', requireAuth, requireAdmin, async (req: AuthedReque
   }
   res.status(204).end();
 });
+
+// ---- Reviews -------------------------------------------------------------------------------
+
+const MAX_COMMENT_LENGTH = 1000;
+
+interface ReviewRow {
+  id: number;
+  product_id: number;
+  user_id: number;
+  rating: number;
+  comment: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
+function toReview(row: ReviewRow) {
+  return {
+    id: row.id,
+    product_id: row.product_id,
+    user_id: row.user_id,
+    rating: row.rating,
+    comment: row.comment,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+async function activeProductExists(id: number): Promise<boolean> {
+  const { rowCount } = await pool.query('SELECT 1 FROM products WHERE id = $1 AND active = true', [id]);
+  return Boolean(rowCount);
+}
+
+/** A signed-in buyer of the product rates it 1-5 with an optional comment; posting again replaces their review. */
+productsRouter.post('/:id/reviews', requireAuth, async (req: AuthedRequest, res: Response) => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    res.status(400).json({ error: 'id must be a positive integer' });
+    return;
+  }
+  // Only rating and comment are read: the author and dates always come from the server.
+  const { rating, comment = '' } = req.body ?? {};
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    res.status(400).json({ error: 'rating must be a whole number from 1 to 5' });
+    return;
+  }
+  if (typeof comment !== 'string') {
+    res.status(400).json({ error: 'comment must be text' });
+    return;
+  }
+  if (comment.length > MAX_COMMENT_LENGTH) {
+    res.status(400).json({ error: `comment must be at most ${MAX_COMMENT_LENGTH} characters` });
+    return;
+  }
+  if (!(await activeProductExists(productId))) {
+    res.status(404).json({ error: 'product not found' });
+    return;
+  }
+  const { rowCount: bought } = await pool.query(
+    `SELECT 1 FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.user_id = $1 AND oi.product_id = $2 LIMIT 1`,
+    [req.user!.id, productId],
+  );
+  if (!bought) {
+    res.status(403).json({ error: 'only buyers of this product can review it' });
+    return;
+  }
+  const { rows } = await pool.query<ReviewRow>(
+    `INSERT INTO product_reviews (product_id, user_id, rating, comment)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (product_id, user_id)
+     DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment, updated_at = now()
+     RETURNING *`,
+    [productId, req.user!.id, rating, comment],
+  );
+  res.status(201).json(toReview(rows[0]));
+});
+
+/** Anyone can read a product's reviews, newest first, with the average rating and the count. */
+productsRouter.get('/:id/reviews', async (req: Request, res: Response) => {
+  const productId = Number(req.params.id);
+  if (!Number.isInteger(productId) || productId <= 0) {
+    res.status(400).json({ error: 'id must be a positive integer' });
+    return;
+  }
+  if (!(await activeProductExists(productId))) {
+    res.status(404).json({ error: 'product not found' });
+    return;
+  }
+  const { rows } = await pool.query<ReviewRow>(
+    'SELECT * FROM product_reviews WHERE product_id = $1 ORDER BY updated_at DESC, id DESC',
+    [productId],
+  );
+  const count = rows.length;
+  const average = count ? Math.round((rows.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10 : null;
+  res.json({ product_id: productId, average, count, reviews: rows.map(toReview) });
+});
