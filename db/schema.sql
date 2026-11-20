@@ -49,6 +49,18 @@ CREATE TABLE IF NOT EXISTS order_items (
   PRIMARY KEY (order_id, product_id)
 );
 
+-- One review per buyer per product; posting again replaces it.
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id         SERIAL PRIMARY KEY,
+  product_id INTEGER     NOT NULL REFERENCES products(id),
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating     INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment    TEXT        NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (product_id, user_id)
+);
+
 -- Starter catalog so a fresh environment has something to browse.
 INSERT INTO products (sku, name, description, category, price_cents, stock)
 SELECT
